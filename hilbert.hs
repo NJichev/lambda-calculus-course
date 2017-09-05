@@ -23,10 +23,20 @@ intern (EAnd fi psi) = (Not (Impl (intern fi) (Not (intern psi))))
 intern (EExist str fi) = (Not (Every str (Not (intern fi))))
 
 instance Show Formula where
-  show (Var var) = var
-  show (Not fi) = "(" ++ "¬" ++ show fi ++ ")"
-  show (Impl fi psi) = "(" ++ show fi ++ "→" ++ show psi ++ ")"
-  show (Every var fi) = "(" ++ "∀" ++ var ++ show(fi) ++ ")"
+  show = forToString
+
+foldfor :: (String -> b) -> (b -> b) -> (b -> b -> b) ->
+           (String -> b -> b) -> Formula -> b
+foldfor f _ _ _ (Var x) = f x
+foldfor f g h u (Not fi) = g $ foldfor f g h u fi
+foldfor f g h u (Impl fi psi) = h (foldfor f g h u fi) (foldfor f g h u psi)
+foldfor f g h u (Every x fi) = u x $ foldfor f g h u fi
+
+forToString :: Formula -> String
+forToString = foldfor (\x -> x)
+                      (\fi -> "(" ++ "¬" ++ fi ++ ")")
+                      (\fi psi -> "(" ++ fi ++ "→" ++ psi ++ ")")
+                      (\x fi -> "(" ++ "∀" ++ x ++ fi ++ ")")
 
 instance Show EFormula where
   show (EVar var) = var
@@ -42,7 +52,6 @@ eq efor for = (intern efor) == for
 
 isAxiom :: Formula -> Bool
 isAxiom f = or (map ($ f) axioms)
--- isAxim fi = any (==True) . 
 
 axioms :: [Formula -> Bool]
 axioms = [isAxiom1, isAxiom2]
@@ -57,19 +66,16 @@ isAxiom2 :: Formula -> Bool
 isAxiom2 (Impl fi (Impl psi xi)) = fi == xi
 isAxiom2 _ = False
 
-isAxiom3 :: Formula -> Bool
-isAxiom3 (Impl (Every x fi) psi) = 
-isAxiom3 _ = False
 
-(~=) :: Formula -> Formula -> Bool
-(~=) (Var x) (Var y) = True
-(~=) (Not fi) (Not psi) = fi ~= psi
-(~=) (Impl fi1 psi1) (Impl fi2 psi2) = fi1 ~= fi2 &&
-                                       psi1 ~= psi2
-(~=) (Not fi) (Not psi) = fi ~= psi
-(~=) (Every x fi) (Every y psi) = x == y &&
-                                  fi ~= psi
-(~=) _ _ = False
+--(~=) :: Formula -> Formula -> Bool
+--(~=) (Var x) (Var y) = True
+--(~=) (Not fi) (Not psi) = fi ~= psi
+--(~=) (Impl fi1 psi1) (Impl fi2 psi2) = fi1 ~= fi2 &&
+--                                       psi1 ~= psi2
+--(~=) (Not fi) (Not psi) = fi ~= psi
+--(~=) (Every x fi) (Every y psi) = x == y &&
+--                                  fi ~= psi
+--(~=) _ _ = False
 
 type Formulae = [Formula]
 type Hypotheses = Formulae
