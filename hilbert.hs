@@ -3,7 +3,8 @@ import Data.List
 type Name = String
 type Names = [Name]
 
-data EFormula = EVar Name
+data EFormula = ETermination
+              | EVar Name
               | ENot EFormula
               | EImpl EFormula EFormula
               | EAnd EFormula EFormula
@@ -12,7 +13,8 @@ data EFormula = EVar Name
               | EExist Name EFormula
               deriving (Eq)
 
-data Formula = Var Name
+data Formula = Termination
+             | Var Name
              | Not Formula
              | Impl Formula Formula
              | Every Name Formula
@@ -20,12 +22,14 @@ data Formula = Var Name
 
 -- Vars
 freeVars :: Formula -> Names
+freeVars Termination   = []
 freeVars (Var var)     = [var]
 freeVars (Not fi)      = freeVars fi
 freeVars (Impl fi psi) = (freeVars fi) ++ (freeVars psi)
 freeVars (Every x fi)  = (freeVars fi) \\ [x]
 
 boundVars :: Formula -> Names
+boundVars Termination   = []
 boundVars (Var _)       = []
 boundVars (Not fi)      = boundVars fi
 boundVars (Impl fi psi) = (boundVars fi) ++ (boundVars psi)
@@ -36,6 +40,7 @@ vars fi = freeVars(fi) ++ boundVars(fi)
 
 
 intern :: EFormula -> Formula
+intern ETermination = Termination
 intern (EVar str) = (Var str)
 intern (ENot fi) = (Not (intern fi))
 intern (EImpl fi psi) = (Impl (intern fi) (intern psi))
@@ -45,12 +50,14 @@ intern (EAnd fi psi) = (Not (Impl (intern fi) (Not (intern psi))))
 intern (EExist str fi) = (Not (Every str (Not (intern fi))))
 
 instance Show Formula where
-  show (Var var) = var
-  show (Not fi) = "(" ++ "¬" ++ show fi ++ ")"
-  show (Impl fi psi) = "(" ++ show fi ++ "→" ++ show psi ++ ")"
+  show (Termination)  = "⊥"
+  show (Var var)      = var
+  show (Not fi)       = "(" ++ "¬" ++ show fi ++ ")"
+  show (Impl fi psi)  = "(" ++ show fi ++ "→" ++ show psi ++ ")"
   show (Every var fi) = "(" ++ "∀" ++ var ++ show(fi) ++ ")"
 
 instance Show EFormula where
+  show (ETermination)  = "⊥"
   show (EVar var) = var
   show (ENot fi) = "(" ++ "¬" ++ show fi ++ ")"
   show (EImpl fi psi) = "(" ++ show fi ++ "→" ++ show psi ++ ")"
@@ -66,7 +73,19 @@ isAxiom :: Formula -> Bool
 isAxiom f = or (map ($ f) axioms)
 
 axioms :: [Formula -> Bool]
-axioms = [isImplAxiom1, isImplAxiom2]
+axioms = [ isImplAxiom1
+         , isImplAxiom2
+         , isAndAxiom1
+         , isAndAxiom2
+         , isOrAxiom1
+         , isOrAxiom2
+         , isEveryAxiom1
+         , isEveryAxiom2
+         , isExistAxiom1
+         , isExistAxiom2
+         , isDNAxiom
+         , isContradictionAxiom
+         ]
 
 -- Axioms for ->
 -- 1. (A → B → C) → (A → B) → A → C
@@ -133,7 +152,17 @@ isExistAxiom1 _ = False
 -- 10 ∀x (A → B) → (∃xA → B), ако x ∈/ FV(B)
 isExistAxiom2 :: Formula -> Bool
 isExistAxiom2 (Impl (Every x (Impl a1 b1)) (Impl (Not (Every y (Not a2))) b2)) = x == y && a1 == a2 && b1 == b2 && (not $ elem x (vars b1))
-isExistaxiom2 _ -> False
+isExistAxiom2 _ = False
+
+-- 11 double negation
+isDNAxiom :: Formula -> Bool
+isDNAxiom (Impl (Not (Not a)) b) = a == b
+isDNAxiom _ = False
+
+-- 12 every formula is true for a 
+isContradictionAxiom :: Formula -> Bool
+isContradictionAxiom (Impl Termination fi) = True
+isContradictionAxiom _ = False
 
 -- Test vars for the axioms
 a = EVar "a"
