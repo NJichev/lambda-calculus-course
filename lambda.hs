@@ -1,4 +1,5 @@
 import Data.List
+import Data.Maybe
 
 type Name = String
 
@@ -37,6 +38,7 @@ boundVars (Abs var term) = boundVars(term) ++ [var]
 vars :: Term -> [Name]
 vars term = freeVars(term) ++ boundVars(term)
 
+-- Simple sub
 sub :: Term -> Name -> Term -> Term
 sub (Var x) y t2
   | x == y    = t2
@@ -61,23 +63,40 @@ instance Show UTerm where
 
 generator :: [Name]
 generator = [ [i] | i <- letters] ++ [i: show j | j <- [1..], i <- letters]
-  where letters = ['x', 'y', 'z', 't', 'u', 'v']
+  where letters = ['x', 'y', 'z', 'u', 'v', 'w', 't']
 
-generate :: [Name] -> Name
-generate used = head (generator \\ used)
+-- generate :: [Name] -> Name
+-- generate used = head (generator \\ used)
+--
+unname :: Term -> UTerm
+unname t = fromJust $ unname' [] (freeVars t) t
+  where
+    unname' bound free (Var x)         = UVar <$> elemIndex x (bound ++ free)
+    unname' bound free (App exp1 exp2) = UApp <$> unname' bound free exp1 <*> unname' bound free exp2
+    unname' bound free (Abs x exp)     = UAbs <$> unname' (x:bound) free exp
 
+-- from DeBruijn index to Name
+(!?) :: [a] -> Int -> Maybe a
+xs !? n = listToMaybe (drop n xs)
+
+name :: UTerm -> Term
+name t = fromJust $ name' generator [] t
+    where
+        name'    names  bound (UVar x)         = Var   <$> (bound ++ names) !? x
+        name'    names  bound (UApp exp1 exp2) = App   <$> name' names bound exp1 <*> name' names bound exp2
+        name' (x:names) bound (UAbs exp)       = Abs x <$> name' names (x:bound) exp
+
+
+(===) :: Term -> Term -> Bool
+t1 === t2 = (unname t1) == (unname t2)
 -- Проверки
 -- • термът λxy се представя като λ1
 -- • термът y(λxxyz)z се представя като 0(λ013)2,
 -- • термът (λxxy(λuzu(λvvy))z) се представя като (λ01(λ40(λ03))3).
 -- • термът λ(λ0((λ1)21))1 отговаря на λx(λtt((λut)yx))y.
---
--- name :: UTerm -> Term
--- name = name'
---   where
---     name' :: 
---
--- unname :: Term -> UTerm
 
--- We want
--- unname(\x -> x) == \ 0
+x = Var "x"
+y = Var "y"
+z = Var "z"
+
+term = (App (App y (Abs "x" (App x (App y z)))) z)
