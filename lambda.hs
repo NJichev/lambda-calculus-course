@@ -38,17 +38,53 @@ boundVars (Abs var term) = boundVars(term) ++ [var]
 vars :: Term -> [Name]
 vars term = freeVars(term) ++ boundVars(term)
 
--- Simple sub
-sub :: Term -> Name -> Term -> Term
-sub (Var x) y t2
-  | x == y    = t2
-  | otherwise = (Var x)
-sub (App t1 t2) y t3 = (App (sub t1 y t3) (sub t2 y t3))
-sub (Abs y t1) x t2
-  | x == y = (Abs y t1)
-  | not(elem x (vars t1)) && not(elem y (freeVars t2)) = (Abs y t1)
-  | otherwise = error "Undefined"
+notFree :: Name -> Term -> Bool
+notFree x t = not $ elem x (freeVars t)
 
+-- Simple sub
+-- sub :: Term -> Name -> Term -> Term
+-- sub (Var x) y t2
+--   | x == y    = t2
+--   | otherwise = (Var x)
+-- sub (App t1 t2) y t3 = (App (sub t1 y t3) (sub t2 y t3))
+-- sub (Abs y t1) x t2
+--   | x == y = (Abs y t1)
+--   | not(elem x (vars t1)) && not(elem y (freeVars t2)) = (Abs y t1)
+--   | otherwise = error "Undefined"
+
+-- Задача 1.1
+renameBoundVar :: Term -> Name -> Name -> Term
+renameBoundVar t@(Var z)   x y = t
+renameBoundVar (App t1 t2) x y = App (renameBoundVar t1 x y) (renameBoundVar t2 x y)
+renameBoundVar (Abs z t) x y
+  | z == x = (Abs y (renameBoundVar' t x y))
+  | otherwise = (Abs z (renameBoundVar t x y))
+  where
+    renameBoundVar' t@(Var z) x y
+      | x == z    = (Var y)
+      | otherwise = t
+    renameBoundVar' (App t1 t2) x y = App (renameBoundVar' t1 x y) (renameBoundVar' t2 x y)
+    renameBoundVar' (Abs z t) x y
+      | z == x    = (Abs y (renameBoundVar' t x y))
+      | otherwise = (Abs z (renameBoundVar' t x y))
+
+-- Задача 1.4
+-- Advanced sub
+sub :: Term -> Name -> Term -> Term
+sub x'@(Var y) x n
+  | y == x    = n
+  | otherwise = x'
+sub (App m1 m2) x n = App (sub m1 x n) (sub m2 x n)
+sub m@(Abs y p) x n
+  | y == x      = m
+  | notFree y n = Abs y (sub p x n)
+  | otherwise   = Abs fresh (sub renamed x n)
+  where
+    fresh = head $ (generator \\ (vars n)) \\ (vars p)
+    renamed = renameBoundVar p y fresh
+
+-- Should not result to identity
+testSub = sub constant "y" (Var "x")
 
 -- Unnamed lambda terms
 data UTerm = UVar Int
@@ -68,6 +104,7 @@ generator = [ [i] | i <- letters] ++ [i: show j | j <- [1..], i <- letters]
 -- generate :: [Name] -> Name
 -- generate used = head (generator \\ used)
 --
+-- Задача 1.7 - функциите unname и name действайки върху множеството `generator`
 unname :: Term -> UTerm
 unname t = fromJust $ unname' [] (freeVars t) t
   where
@@ -100,3 +137,32 @@ y = Var "y"
 z = Var "z"
 
 term = (App (App y (Abs "x" (App x (App y z)))) z)
+
+-- Изместване(ще помогне за субституцията)
+shift :: Int -> Int -> UTerm -> UTerm
+shift d c (UVar k)
+  | k < c     = (UVar k)
+  | otherwise = (UVar (k + d))
+shift d c (UApp t1 t2) = (UApp (shift d c t1) (shift d c t2))
+shift d c (UAbs t) = (UAbs (shift d (c + 1) t))
+
+shiftZero :: Int -> UTerm -> UTerm
+shiftZero d t = shift d 0 t
+
+shiftWithOne :: UTerm -> UTerm
+shiftWithOne = shiftZero 1
+
+-- Дефиниция 1.5 (Субституция на безименни термове). Нека M, N ∈ Λn и
+-- k ∈ N. С индукция по M дефинираме субституцията M[k → N] ∈ Λn.
+-- (1) k[k → N] := N
+-- (2) i[k → N] := i за i 6= k
+-- (3) (M1M2)[k → N] := (M1[k → N])(M2[k → N])
+-- (4) (λM)[k → N] := λ(M[k + 1 →↑1
+-- (N)])
+-- Задача 1.10 - M[k -> N]
+subUnnamed :: UTerm -> Int -> UTerm -> UTerm
+subUnnamed m@(UVar i) k n
+  | i == k    = n
+  | otherwise = m
+subUnnamed (UApp t1 t2) k n = UApp (subUnnamed t1 k n) (subUnnamed t2 k n)
+subUnnamed (UAbs m) k n = UAbs (subUnnamed m (k + 1) (shiftWithOne n))
